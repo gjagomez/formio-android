@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">formio-android demo</string>
+    <string name="schema_name">Example Form (all field types)</string>
+    <string name="label_schema">SCHEMA</string>
+    <string name="label_result">RESULT</string>
+    <string name="hint_result">Tap the button to open the form.\nThe collected data will appear here.</string>
+    <string name="btn_open_form">Open Form</string>
+</resources>

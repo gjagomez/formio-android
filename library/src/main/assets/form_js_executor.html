@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script>
+
+// ── Minimal moment shim ───────────────────────────────────────────────────────
+function moment(dateStr, fmt) {
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function parse(s, f) {
+    if (!s) return null;
+    try {
+      var p = String(s).split(/[-\/]/);
+      var fu = (f || '').toUpperCase().replace(/-/g,'/');
+      var y, m, d;
+      if (fu === 'DD/MM/YYYY')      { d=+p[0]; m=+p[1]-1; y=+p[2]; }
+      else if (fu === 'MM/DD/YYYY') { m=+p[0]-1; d=+p[1]; y=+p[2]; }
+      else if (fu === 'YYYY/MM/DD') { y=+p[0]; m=+p[1]-1; d=+p[2]; }
+      else { var dt=new Date(s); return isNaN(dt)?null:dt; }
+      return new Date(y, m, d);
+    } catch(e) { return null; }
+  }
+  var _d = (dateStr===undefined||dateStr===null) ? new Date() : parse(dateStr, fmt);
+  return {
+    _d: _d,
+    format: function(f) {
+      if (!_d || isNaN(_d.getTime())) return '';
+      return f
+        .replace('YYYY',_d.getFullYear())
+        .replace('MM',pad(_d.getMonth()+1))
+        .replace('DD',pad(_d.getDate()))
+        .replace('HH',pad(_d.getHours()))
+        .replace('mm',pad(_d.getMinutes()));
+    },
+    valueOf:  function() { return _d ? _d.getTime() : 0; },
+    isAfter:  function(o) { return this.valueOf() > o.valueOf(); },
+    isBefore: function(o) { return this.valueOf() < o.valueOf(); },
+    isSame:   function(o) { return this.valueOf() === o.valueOf(); }
+  };
+}
+
+// ── HTTP call queue (supports concurrent fetch + app.ws calls) ────────────────
+var _httpQueue = {};
+var _httpCallId = 0;
+
+function _httpCall(url, method, headers, body) {
+  return new Promise(function(resolve, reject) {
+    var id = ++_httpCallId;
+    _httpQueue[id] = { resolve: resolve, reject: reject };
+    Android.wsCall(
+      String(url || ''),
+      String(method || 'get').toLowerCase(),
+      JSON.stringify(typeof headers === 'object' && headers ? headers : {}),
+      typeof body === 'string' ? body : (body ? JSON.stringify(body) : ''),
+      id
+    );
+  });
+}
+
+// Called by Kotlin when an HTTP response arrives (raw text)
+function _wsResult(id, rawText, isError) {
+  var cb = _httpQueue[id];
+  if (!cb) return;
+  delete _httpQueue[id];
+  if (isError) { cb.reject(new Error(rawText)); }
+  else         { cb.resolve(rawText); }
+}
+
+// Legacy callbacks kept for backwards compat with existing schemas
+window._wsResolve = function(json) {};
+window._wsReject  = function(err)  {};
+
+// ── fetch() shim — bridges native fetch to Android HTTP bridge ────────────────
+window.fetch = function(url, options) {
+  options = options || {};
+  var method  = (options.method  || 'GET').toLowerCase();
+  var headers = options.headers  || {};
+  var body    = options.body     || '';
+
+  return _httpCall(url, method, headers, body).then(function(rawText) {
+    var parsedOnce = null;
+    function tryParse() {
+      if (parsedOnce !== null) return parsedOnce;
+      try { parsedOnce = JSON.parse(rawText); } catch(e) { parsedOnce = rawText; }
+      return parsedOnce;
+    }
+    return {
+      ok:     true,
+      status: 200,
+      text:   function() { return Promise.resolve(rawText); },
+      json:   function() {
+        try { return Promise.resolve(JSON.parse(rawText)); }
+        catch(e) { return Promise.reject(new SyntaxError('Invalid JSON: ' + rawText.slice(0,80))); }
+      },
+      clone:  function() { return this; }
+    };
+  });
+};
+
+// ── form shim ─────────────────────────────────────────────────────────────────
+var form = {
+  getComponent: function(key) {
+    return {
+      setValue: function(val) {
+        Android.setField(key, (val===null||val===undefined) ? '' : String(val));
+      },
+      getValue:      function() { return Android.getField(key); },
+      redraw:        function() {},
+      triggerChange: function() {}
+    };
+  },
+  refresh: function() {}
+};
+
+// ── app shim ──────────────────────────────────────────────────────────────────
+var app = {
+  ws: function(settings, method) {
+    return _httpCall(
+      settings.url || '',
+      method || 'get',
+      settings.headers || {},
+      settings.data || ''
+    ).then(function(rawText) {
+      try { return JSON.parse(rawText); } catch(e) { return rawText; }
+    });
+  },
+  mostrarMensaje: function(title, msg, type) {
+    Android.showMessage(String(title||''), String(msg||''), String(type||'info'));
+  }
+};
+
+// ── Entry point called from Kotlin ────────────────────────────────────────────
+function _runButton(base64Payload) {
+  try {
+    var payload = JSON.parse(atob(base64Payload));
+    var data = payload.data || {};
+    var row  = data;
+    var result;
+    try {
+      result = eval(payload.code);
+    } catch(e) {
+      Android.onJsError(e.message || String(e));
+      return;
+    }
+    // If the code returned a Promise, catch any async rejection
+    if (result && typeof result.then === 'function') {
+      result.catch(function(e) {
+        Android.onJsError(e ? (e.message || String(e)) : 'Error asíncrono');
+      });
+    }
+  } catch(e) {
+    Android.onJsError(e.message || String(e));
+  }
+}
+</script>
+</head>
+<body></body>
+</html>

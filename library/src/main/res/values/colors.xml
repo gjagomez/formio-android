@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Default color palette for formio-renderer.
+    Host apps can override any of these in their own res/values/colors.xml.
+-->
+<resources>
+    <color name="bg_primary">#0F0F0F</color>
+    <color name="bg_card">#1A1A1A</color>
+    <color name="bg_input">#242424</color>
+    <color name="bg_elevated">#2E2E2E</color>
+
+    <color name="accent_green">#00C896</color>
+    <color name="accent_green_10">#1A2E2E</color>
+
+    <color name="text_primary">#F0F0F0</color>
+    <color name="text_secondary">#A0A0A0</color>
+    <color name="text_hint">#606060</color>
+    <color name="text_on_accent">#000000</color>
+
+    <color name="stroke">#2A2A2A</color>
+    <color name="input_border">#333333</color>
+    <color name="input_border_active">#00C896</color>
+
+    <color name="radio_selected_bg">#0A2E24</color>
+    <color name="error_color">#CF6679</color>
+    <color name="msg_warning">#FFB74D</color>
+
+    <color name="stat_new">#E83E8C</color>
+    <color name="stat_done">#F5A623</color>
+    <color name="stat_sent">#4FC3F7</color>
+    <color name="sync_online">#4CAF50</color>
+    <color name="sync_offline">#757575</color>
+    <color name="sync_syncing">#FFC107</color>
+
+    <!-- ── Button theme colors ─────────────────────────────────────────────────
+         Override any of these in your app's res/values/colors.xml to customize
+         the look of form buttons without touching library code.
+         Format: btn_<theme>_bg  /  btn_<theme>_text
+    ──────────────────────────────────────────────────────────────────────── -->
+    <color name="btn_primary_bg">@color/accent_green</color>
+    <color name="btn_primary_text">@color/text_on_accent</color>
+
+    <color name="btn_success_bg">#4CAF50</color>
+    <color name="btn_success_text">#000000</color>
+
+    <color name="btn_warning_bg">@color/msg_warning</color>
+    <color name="btn_warning_text">#1A1A1A</color>
+
+    <color name="btn_info_bg">#4FC3F7</color>
+    <color name="btn_info_text">#000000</color>
+
+    <color name="btn_danger_bg">@color/error_color</color>
+    <color name="btn_danger_text">@color/text_primary</color>
+
+    <color name="btn_secondary_stroke">@color/accent_green</color>
+    <color name="btn_secondary_text">@color/accent_green</color>
+
+    <color name="md_theme_dark_primary">#00C896</color>
+    <color name="md_theme_dark_onPrimary">#000000</color>
+    <color name="md_theme_dark_primaryContainer">#003828</color>
+    <color name="md_theme_dark_onPrimaryContainer">#57FFCA</color>
+    <color name="md_theme_dark_secondary">#4FC3F7</color>
+    <color name="md_theme_dark_onSecondary">#000000</color>
+    <color name="md_theme_dark_secondaryContainer">#004D67</color>
+    <color name="md_theme_dark_onSecondaryContainer">#C8E6F7</color>
+    <color name="md_theme_dark_tertiary">#E83E8C</color>
+    <color name="md_theme_dark_onTertiary">#000000</color>
+    <color name="md_theme_dark_background">#0F0F0F</color>
+    <color name="md_theme_dark_onBackground">#F0F0F0</color>
+    <color name="md_theme_dark_surface">#1A1A1A</color>
+    <color name="md_theme_dark_onSurface">#F0F0F0</color>
+    <color name="md_theme_dark_surfaceVariant">#242424</color>
+    <color name="md_theme_dark_onSurfaceVariant">#A0A0A0</color>
+    <color name="md_theme_dark_outline">#2A2A2A</color>
+    <color name="md_theme_dark_error">#CF6679</color>
+    <color name="md_theme_dark_onError">#000000</color>
+</resources>

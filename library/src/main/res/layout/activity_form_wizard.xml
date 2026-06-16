@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_primary">
+
+    <!-- TopBar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="9dp"
+            android:background="@drawable/bg_topbar_icon_btn"
+            android:src="@drawable/ic_topbar_back"
+            android:tint="@color/text_primary"
+            android:scaleType="fitCenter" />
+
+        <TextView
+            android:id="@+id/tvFormTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="12dp"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <ImageButton
+            android:id="@+id/btnSave"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="9dp"
+            android:background="@drawable/bg_topbar_icon_btn"
+            android:src="@drawable/ic_topbar_save"
+            android:tint="@color/accent_green"
+            android:scaleType="fitCenter" />
+    </LinearLayout>
+
+    <!-- Tabs scrollable -->
+    <HorizontalScrollView
+        android:id="@+id/tabsScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="68dp"
+        android:scrollbars="none"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <LinearLayout
+            android:id="@+id/tabsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
+
+    <!-- ProgressBar -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:progressTint="@color/accent_green"
+        android:progressBackgroundTint="@color/stroke"
+        android:max="10"
+        android:progress="1" />
+
+    <!-- ViewPager2 -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Separador -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/stroke" />
+
+    <!-- Botones navegación -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="24dp"
+        android:background="@color/bg_primary">
+
+        <!-- Atrás: secundario, más pequeño (40% ancho) -->
+        <Button
+            android:id="@+id/btnPrev"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="2"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="12dp"
+            android:text="@string/formio_btn_atras"
+            android:background="@drawable/bg_nav_btn_prev"
+            android:textColor="@color/accent_green"
+            android:textSize="13sp"
+            android:textAllCaps="false"
+            android:letterSpacing="0"
+            android:gravity="center"
+            android:drawableStart="@drawable/ic_nav_arrow_left"
+            android:drawablePadding="5dp"
+            android:visibility="gone" />
+
+        <!-- Siguiente: primario, más grande (60% ancho) -->
+        <Button
+            android:id="@+id/btnNext"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="3"
+            android:layout_gravity="center_vertical"
+            android:text="@string/formio_btn_siguiente"
+            android:background="@drawable/bg_nav_btn_next"
+            android:textColor="@color/text_on_accent"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:letterSpacing="0"
+            android:gravity="center"
+            android:drawableEnd="@drawable/ic_nav_arrow_right"
+            android:drawablePadding="6dp" />
+    </LinearLayout>
+
+</LinearLayout>

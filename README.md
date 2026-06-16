@@ -155,6 +155,37 @@ formLauncher.launch(
 )
 ```
 
+### Remote selects (`dataSrc: "url"`)
+
+Selects can load their options from any JSON endpoint configured in the Form.io designer — no app code needed:
+
+```json
+{
+    "type": "select",
+    "label": "Model",
+    "key": "model",
+    "dataSrc": "url",
+    "data": {
+        "url": "https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/honda?format=json"
+    },
+    "selectValues": "Results",
+    "valueProperty": "Model_Name",
+    "template": "<span>{{ item.Model_Name }}</span>",
+    "lazyLoad": true
+}
+```
+
+| Property | Description |
+|---|---|
+| `data.url` | GET endpoint. Supports `{{ data.otherField }}` placeholders, re-resolved with current form values |
+| `data.headers` | Optional request headers `[{ "key": "...", "value": "..." }]` |
+| `selectValues` | Dot-path to the array inside the response (e.g. `"Results"`, `"data.items"`). Omit if the response is already an array |
+| `valueProperty` | Dot-path to the stored value inside each item |
+| `template` | Item label, e.g. `"<span>{{ item.name }}</span>"` (HTML is stripped) |
+| `lazyLoad` | `true` = fetch on first tap, `false` = fetch when the field renders |
+
+Cascading selects work out of the box: combine `refreshOn: "make"` + `clearOnRefresh: true` with a URL like `https://api.example.com/models?make={{ data.make }}` — when `make` changes, the dependent select clears and reloads. Responses are cached per resolved URL, and long remote lists automatically get the searchable bottom-sheet picker.
+
 ### Result explained
 
 | Field | Type | Description |
@@ -179,6 +210,49 @@ The library ships with a dark Material 3 theme (`Theme.FormioRenderer`). Every c
     <color name="text_secondary">#A0A0A0</color>
     <color name="error_color">#CF6679</color>
 </resources>
+```
+
+---
+
+## Try the sample app
+
+A complete working example is included in the [`sample/`](sample/) folder.
+
+It loads the Form.io JSON schema from [`sample/src/main/res/raw/example_schema.json`](sample/src/main/res/raw/example_schema.json) and demonstrates the full launch → result flow in under 30 lines of code.
+
+**To run it:**
+
+```bash
+git clone https://github.com/gjagomez/formio-android.git
+cd formio-android/sample
+./gradlew installDebug
+```
+
+> The sample is a standalone Gradle project that consumes the library from `../library`, so open the `sample/` folder (not the repo root) in Android Studio.
+
+**What the sample does:**
+
+```kotlin
+// 1. Register the launcher
+val formLauncher = registerForActivityResult(FormioRenderer.Contract()) { result ->
+    result ?: return@registerForActivityResult
+
+    val status = if (result.isFinal) "FINAL" else "DRAFT"
+    // result.formData → Map<String, Any?> with all collected field values
+    showData(result.formData, status)
+}
+
+// 2. Read schema from any source (raw resource, string, API response…)
+val schemaJson = resources.openRawResource(R.raw.example_schema).bufferedReader().readText()
+
+// 3. Launch
+formLauncher.launch(
+    FormioRenderer.Input(
+        schemaJson  = schemaJson,
+        prefillData = emptyMap(),
+        title       = "Example Form"
+    )
+)
 ```
 
 ---
