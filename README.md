@@ -1,6 +1,6 @@
 # formio-android
 
-An Android library that renders [Form.io](https://form.io) JSON schemas as native mobile forms — no WebView, no JavaScript runtime. Built with Kotlin, Material Design 3, and a dark-first UI.
+An Android library that renders [Form.io](https://form.io) JSON schemas as native mobile forms. Built with Kotlin, Material Design 3, and a dark-first UI.
 
 > **Open source and community-driven.** Contributions, new components, and improvements are welcome!
 
@@ -27,18 +27,24 @@ An Android library that renders [Form.io](https://form.io) JSON schemas as nativ
 
 ## Features
 
-- ✅ Renders Form.io JSON schemas natively (no WebView)
+- ✅ Renders Form.io JSON schemas natively
 - ✅ Multi-page wizard with tab navigation and progress bar
-- ✅ Conditional logic (`conditional`, `customConditional`)
+- ✅ **Loading overlay** — animated spinner shown while the form opens and during `app.ws()` HTTP calls
+- ✅ **Async JSON parsing** — schema is parsed off the main thread so the UI never freezes
+- ✅ **Lazy JS executor** — WebView for custom buttons is created on first tap, not at startup
+- ✅ **Wizard validation** — required fields validated per page with error bottom sheet before advancing
+- ✅ **HTML element with full CSS** — `htmlelement` components with inline `style=` are rendered in a WebView so all styling is respected
+- ✅ Conditional logic (`conditional`, `customConditional`, JSON Logic)
 - ✅ `calculateValue` expressions with live re-evaluation
 - ✅ Field validation (required, minLength, maxLength, pattern, min/max, custom JS)
+- ✅ Button themes: `primary`, `success`, `warning`, `info`, `danger`, `secondary`
+- ✅ Button with custom JS execution (`app.ws()`, `form.getComponent()`, `moment()`)
 - ✅ Camera and gallery photo capture
 - ✅ Signature pad with zoom preview
-- ✅ Map/location picker
-- ✅ Datagrid (repeating rows)
-- ✅ Panel, Columns, Tabs layout components
+- ✅ Map / location picker
+- ✅ Datagrid and EditGrid (repeating rows)
+- ✅ Panel, Columns, Tabs, Table layout components
 - ✅ `refreshOn` / `clearOnRefresh` cascading selects
-- ✅ Button with custom JS execution (`app.ws()`, `form.getComponent()`, `moment()`)
 - ✅ Dark theme with fully overridable Material 3 color tokens
 - ✅ Returns form data as `Map<String, Any?>` — you control persistence
 
@@ -53,18 +59,22 @@ An Android library that renders [Form.io](https://form.io) JSON schemas as nativ
 | `number`, `currency` | ✅ |
 | `select` (static, URL, custom) | ✅ |
 | `radio` | ✅ |
+| `checkbox` | ✅ |
 | `selectboxes` | ✅ |
 | `tags` | ✅ |
-| `datetime` | ✅ |
+| `datetime`, `day` | ✅ |
 | `file` (camera + gallery) | ✅ |
 | `signature` | ✅ |
 | `map` / `location` | ✅ |
-| `htmlelement` | ✅ |
-| `button` | ✅ |
+| `address` | ✅ |
+| `survey` | ✅ |
+| `htmlelement` (with inline CSS) | ✅ |
+| `button` (all themes + custom JS) | ✅ |
 | `panel`, `well` | ✅ |
 | `columns` | ✅ |
+| `table` | ✅ |
 | `tabs` | ✅ |
-| `datagrid` | ✅ |
+| `datagrid`, `editgrid` | ✅ |
 | `hidden` | ✅ |
 
 ---
@@ -100,14 +110,14 @@ dependencyResolutionManagement {
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.github.gjagomez:formio-android:1.0.0")
+    implementation("com.github.gjagomez:formio-android:1.1.0")
 }
 ```
 
 ```groovy
 // build.gradle (Groovy)
 dependencies {
-    implementation 'com.github.gjagomez:formio-android:1.0.0'
+    implementation 'com.github.gjagomez:formio-android:1.1.0'
 }
 ```
 
@@ -166,7 +176,7 @@ Selects can load their options from any JSON endpoint configured in the Form.io 
     "key": "model",
     "dataSrc": "url",
     "data": {
-        "url": "https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/honda?format=json"
+        "url": "https://api.example.com/models?make={{ data.make }}"
     },
     "selectValues": "Results",
     "valueProperty": "Model_Name",
@@ -177,38 +187,78 @@ Selects can load their options from any JSON endpoint configured in the Form.io 
 
 | Property | Description |
 |---|---|
-| `data.url` | GET endpoint. Supports `{{ data.otherField }}` placeholders, re-resolved with current form values |
+| `data.url` | GET endpoint. Supports `{{ data.otherField }}` placeholders resolved from current form values |
 | `data.headers` | Optional request headers `[{ "key": "...", "value": "..." }]` |
-| `selectValues` | Dot-path to the array inside the response (e.g. `"Results"`, `"data.items"`). Omit if the response is already an array |
+| `selectValues` | Dot-path to the array inside the response (e.g. `"Results"`, `"data.items"`). Omit if response is already an array |
 | `valueProperty` | Dot-path to the stored value inside each item |
 | `template` | Item label, e.g. `"<span>{{ item.name }}</span>"` (HTML is stripped) |
 | `lazyLoad` | `true` = fetch on first tap, `false` = fetch when the field renders |
 
-Cascading selects work out of the box: combine `refreshOn: "make"` + `clearOnRefresh: true` with a URL like `https://api.example.com/models?make={{ data.make }}` — when `make` changes, the dependent select clears and reloads. Responses are cached per resolved URL, and long remote lists automatically get the searchable bottom-sheet picker.
+Cascading selects work out of the box: combine `refreshOn: "make"` + `clearOnRefresh: true` — when `make` changes, the dependent select clears and reloads automatically.
+
+### Custom button actions (`app.ws()`)
+
+Buttons with a `custom` JS field can call a backend endpoint and update form fields. While the call is in flight, a full-screen loading overlay is shown automatically:
+
+```json
+{
+    "type": "button",
+    "label": "Consultar",
+    "key": "btnConsultar",
+    "theme": "primary",
+    "action": "custom",
+    "custom": "app.ws({ url: 'https://api.example.com/lookup', data: { dpi: data.dpi } }, 'post').then(function(res) { form.getComponent('nombre').setValue(res.nombre); });"
+}
+```
+
+Supported JS APIs inside `custom`:
+
+| API | Description |
+|---|---|
+| `app.ws(settings, method)` | HTTP call — shows loading overlay, returns a Promise |
+| `form.getComponent(key).setValue(val)` | Set a field value from the response |
+| `form.getComponent(key).getValue()` | Read a field value |
+| `app.mostrarMensaje(title, msg, type)` | Show a toast (`info`, `success`, `warning`, `danger`) |
+| `moment(date, format)` | Basic date formatting |
 
 ### Result explained
 
 | Field | Type | Description |
 |---|---|---|
 | `formData` | `Map<String, Any?>` | All field values keyed by the Form.io component `key` |
-| `isFinal` | `Boolean` | `true` when the user completed the last page, `false` when they used the draft save button |
+| `isFinal` | `Boolean` | `true` when the user completed the last page, `false` on draft save |
 
 ---
 
 ## Theming
 
-The library ships with a dark Material 3 theme (`Theme.FormioRenderer`). Every color is overridable in your app's `res/values/colors.xml`:
+The library ships with a dark Material 3 theme. Every color is overridable in your app's `res/values/colors.xml`:
 
 ```xml
 <!-- res/values/colors.xml in your app -->
 <resources>
-    <!-- Override any of these to match your brand -->
+    <!-- Brand accent (buttons, borders, active states) -->
     <color name="accent_green">#00C896</color>
+
+    <!-- Backgrounds -->
     <color name="bg_primary">#0F0F0F</color>
     <color name="bg_card">#1A1A1A</color>
+    <color name="bg_input">#242424</color>
+
+    <!-- Text -->
     <color name="text_primary">#F0F0F0</color>
     <color name="text_secondary">#A0A0A0</color>
+
+    <!-- Validation -->
     <color name="error_color">#CF6679</color>
+
+    <!-- Button themes -->
+    <color name="btn_primary_bg">#00C896</color>
+    <color name="btn_primary_text">#000000</color>
+    <color name="btn_success_bg">#4CAF50</color>
+    <color name="btn_warning_bg">#FFB74D</color>
+    <color name="btn_info_bg">#4FC3F7</color>
+    <color name="btn_danger_bg">#CF6679</color>
 </resources>
 ```
 
@@ -216,9 +266,7 @@ The library ships with a dark Material 3 theme (`Theme.FormioRenderer`). Every c
 
 ## Try the sample app
 
-A complete working example is included in the [`sample/`](sample/) folder.
-
-It loads the Form.io JSON schema from [`sample/src/main/res/raw/example_schema.json`](sample/src/main/res/raw/example_schema.json) and demonstrates the full launch → result flow in under 30 lines of code.
+A complete working example is in the [`sample/`](sample/) folder.
 
 **To run it:**
 
@@ -228,32 +276,7 @@ cd formio-android/sample
 ./gradlew installDebug
 ```
 
-> The sample is a standalone Gradle project that consumes the library from `../library`, so open the `sample/` folder (not the repo root) in Android Studio.
-
-**What the sample does:**
-
-```kotlin
-// 1. Register the launcher
-val formLauncher = registerForActivityResult(FormioRenderer.Contract()) { result ->
-    result ?: return@registerForActivityResult
-
-    val status = if (result.isFinal) "FINAL" else "DRAFT"
-    // result.formData → Map<String, Any?> with all collected field values
-    showData(result.formData, status)
-}
-
-// 2. Read schema from any source (raw resource, string, API response…)
-val schemaJson = resources.openRawResource(R.raw.example_schema).bufferedReader().readText()
-
-// 3. Launch
-formLauncher.launch(
-    FormioRenderer.Input(
-        schemaJson  = schemaJson,
-        prefillData = emptyMap(),
-        title       = "Example Form"
-    )
-)
-```
+> Open the `sample/` folder (not the repo root) in Android Studio.
 
 ---
 
@@ -268,34 +291,42 @@ formLauncher.launch(
 
 ---
 
+## Changelog
+
+### v1.1.0
+- Loading overlay shown while the form opens and during HTTP button calls
+- Async JSON schema parsing — no more UI freeze on large forms
+- Lazy WebView — faster navigation between wizard pages
+- Wizard validation fixed — required fields validated reliably on every page
+- `htmlelement` with inline CSS now rendered via WebView (full style support)
+- Added `survey`, `address`, `checkbox`, `editgrid`, `table` components
+- Button themes: `primary`, `success`, `warning`, `info`, `danger`, `secondary`
+
+### v1.0.0
+- Initial release
+
+---
+
 ## Roadmap
 
 - [ ] Light theme support
 - [ ] `signature` — upload from gallery
 - [ ] `file` — multiple file upload
-- [ ] `survey` component
-- [ ] `address` component
-- [ ] Offline-first data queue (bring-your-own persistence)
 - [ ] Accessibility (TalkBack support)
 - [ ] English / i18n string overrides
+- [ ] Offline-first data queue (bring-your-own persistence)
 
 ---
 
 ## Contributing
 
-Contributions are very welcome! This library is designed to grow with the community.
+Contributions are very welcome!
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/my-new-component`
 3. Commit your changes: `git commit -m "feat: add survey component"`
 4. Push to the branch: `git push origin feat/my-new-component`
 5. Open a Pull Request
-
-**Areas where help is especially appreciated:**
-- New Form.io component types
-- Light theme
-- Tests
-- Documentation / examples in other languages
 
 Please open a GitHub Issue before starting large changes so we can align on the approach.
 
