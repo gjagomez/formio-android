@@ -3,6 +3,7 @@
 import android.app.Dialog
 import android.content.Context
 import android.graphics.*
+import android.media.ExifInterface
 import android.util.Base64
 import android.view.*
 import android.widget.*
@@ -19,15 +20,32 @@ class ImageViewerDialog(private val context: Context) {
 
     // ── Bitmap loader (base64 or file path) ────────────────────────────────────
 
-    private fun loadBitmap(value: String): Bitmap? = try {
-        if (value.startsWith("/") || value.startsWith("file://")) {
-            val path = value.removePrefix("file://")
-            BitmapFactory.decodeFile(path)
-        } else {
-            val bytes = Base64.decode(value.substringAfter("base64,"), Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        }
-    } catch (_: Exception) { null }
+    private fun loadBitmap(value: String): Bitmap? {
+        return try {
+            if (value.startsWith("/") || value.startsWith("file://")) {
+                val path = value.removePrefix("file://")
+                val raw = BitmapFactory.decodeFile(path) ?: return null
+                val exif = ExifInterface(path)
+                val degrees = when (exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+                )) {
+                    ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+                if (degrees == 0f) raw
+                else {
+                    val matrix = Matrix().apply { postRotate(degrees) }
+                    Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                        .also { if (it !== raw) raw.recycle() }
+                }
+            } else {
+                val bytes = Base64.decode(value.substringAfter("base64,"), Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+        } catch (_: Exception) { null }
+    }
 
     // ── Dialog ─────────────────────────────────────────────────────────────────
 

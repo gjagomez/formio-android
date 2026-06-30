@@ -1,9 +1,12 @@
 ﻿package com.genesis.formio.engine
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.drawable.GradientDrawable
+import android.media.ExifInterface
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
@@ -238,11 +241,11 @@ class FileFieldBuilder(private val context: Context) {
         fun showPreview(value: String) {
             if (value.isBlank()) return
             try {
-                val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
                 val bmp = if (value.startsWith("/") || value.startsWith("file://")) {
                     val path = if (value.startsWith("file://")) value.removePrefix("file://") else value
-                    BitmapFactory.decodeFile(path, opts)
+                    decodeBitmapFromPath(path)
                 } else {
+                    val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
                     val bytes = Base64.decode(value.substringAfter("base64,"), Base64.DEFAULT)
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
                 }
@@ -369,6 +372,28 @@ class FileFieldBuilder(private val context: Context) {
         if (existingValue.isNotBlank()) showPreview(existingValue)
 
         return container
+    }
+
+    // ── EXIF-aware bitmap loader ───────────────────────────────────────────────
+
+    private fun decodeBitmapFromPath(path: String): Bitmap? {
+        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+        val raw = BitmapFactory.decodeFile(path, opts) ?: return null
+        return try {
+            val exif = ExifInterface(path)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+            )
+            val degrees = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> return raw
+            }
+            val matrix = Matrix().apply { postRotate(degrees) }
+            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                .also { if (it !== raw) raw.recycle() }
+        } catch (_: Throwable) { raw }
     }
 
     // ── Large action tile ──────────────────────────────────────────────────────
