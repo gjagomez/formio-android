@@ -169,6 +169,7 @@ class FormWizardViewModel(app: Application) : AndroidViewModel(app) {
         dataSrc = o.optStr("dataSrc"),
         title = o.optStr("title"),
         content = o.optStr("content"),
+        html = o.optStr("html"),
         tag = o.optStr("tag"),
         attrsJson = o.optJSONArray("attrs")?.toString(),
         columns = o.optJSONArray("columns")?.let { parseColumns(it) },
@@ -216,7 +217,10 @@ class FormWizardViewModel(app: Application) : AndroidViewModel(app) {
         collapsed = o.optBoolean("collapsed", false),
         tableRows = o.optJSONArray("rows")?.let { parseTableRows(it) },
         size = o.optString("size", "md"),
-        theme = o.optString("theme", "primary")
+        theme = o.optString("theme", "primary"),
+        scan = o.optBoolean("scan", false),
+        uploadOnly = o.optBoolean("uploadOnly", false),
+        selfie = o.optBoolean("selfie", false)
     )
 
     private fun parseTableRows(arr: JSONArray): List<List<TableCell>>? {

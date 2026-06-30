@@ -20,6 +20,7 @@ data class FormComponent(
     val dataSrc: String? = null,
     val title: String? = null,
     val content: String? = null,
+    val html: String? = null,
     val tag: String? = null,
     val attrsJson: String? = null,
     val columns: List<Column>? = null,
@@ -61,7 +62,10 @@ data class FormComponent(
     val collapsed: Boolean = false,
     val tableRows: List<List<TableCell>>? = null,
     val size: String = "md",
-    val theme: String = "primary"
+    val theme: String = "primary",
+    val scan: Boolean = false,
+    val uploadOnly: Boolean = false,
+    val selfie: Boolean = false
 )
 
 /** One cell of a `table` layout component. */

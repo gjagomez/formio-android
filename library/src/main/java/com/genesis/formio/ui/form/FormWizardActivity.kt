@@ -16,7 +16,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import com.genesis.formio.ui.selfie.SelfieCaptureActivity
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -54,6 +59,8 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
 
     private var cameraPhotoCallback: ((String) -> Unit)? = null
     private var galleryPhotoCallback: ((String) -> Unit)? = null
+    private var scannerPhotoCallback: ((String) -> Unit)? = null
+    private var selfiePhotoCallback: ((String) -> Unit)? = null
     private var tempCameraUri: Uri? = null
 
     private val cameraPermissionLauncher = registerForActivityResult(
@@ -78,6 +85,29 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
         lifecycleScope.launch(Dispatchers.IO) {
             val path = PhotoStorage.saveFromUri(this@FormWizardActivity, uri)
             withContext(Dispatchers.Main) { galleryPhotoCallback?.invoke(path) }
+        }
+    }
+
+    private val documentScannerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val imageUri = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+                ?.pages?.firstOrNull()?.imageUri ?: return@registerForActivityResult
+            lifecycleScope.launch(Dispatchers.IO) {
+                val path = PhotoStorage.saveFromUri(this@FormWizardActivity, imageUri)
+                withContext(Dispatchers.Main) { scannerPhotoCallback?.invoke(path) }
+            }
+        }
+    }
+
+    private val selfieLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val path = result.data?.getStringExtra(SelfieCaptureActivity.EXTRA_PHOTO_PATH) ?: return@registerForActivityResult
+            selfiePhotoCallback?.invoke(path)
+            selfiePhotoCallback = null
         }
     }
 
@@ -112,6 +142,18 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
         binding.btnBack.setOnClickListener { setResult(RESULT_CANCELED); finish() }
 
         binding.btnSave.setOnClickListener {
+            val allPages = viewModel.pages.value ?: emptyList()
+            val hidden = viewModel.hiddenPageIndices.value ?: emptySet()
+            val validationEngine = com.genesis.formio.engine.ValidationEngine(this@FormWizardActivity)
+            val allErrors = mutableListOf<String>()
+            for ((index, page) in allPages.withIndex()) {
+                if (index in hidden) continue
+                allErrors.addAll(validationEngine.validateRecursive(page.components, viewModel.formData))
+            }
+            if (allErrors.isNotEmpty()) {
+                showValidationErrors(allErrors)
+                return@setOnClickListener
+            }
             returnResult(isFinal = false)
         }
 
@@ -174,14 +216,38 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
 
         binding.btnNext.setOnClickListener {
             val currentIndex = binding.viewPager.currentItem
-            val fragment = fragmentAt(currentIndex)
-            val errors = fragment?.validate() ?: emptyList()
-            if (errors.isNotEmpty()) { showValidationErrors(errors); return@setOnClickListener }
             val hidden = viewModel.hiddenPageIndices.value ?: emptySet()
             var next = currentIndex + 1
             while (next < pages.size && next in hidden) next++
-            if (next < pages.size) binding.viewPager.currentItem = next
-            else returnResult(isFinal = true)
+            val isLastPage = next >= pages.size
+            val validationEngine = com.genesis.formio.engine.ValidationEngine(this@FormWizardActivity)
+
+            if (isLastPage) {
+                // Validar TODOS los tabs antes de guardar
+                val allErrors = mutableListOf<String>()
+                for ((index, page) in pages.withIndex()) {
+                    if (index in hidden) continue
+                    allErrors.addAll(validationEngine.validateRecursive(page.components, viewModel.formData))
+                }
+                if (allErrors.isNotEmpty()) {
+                    showValidationErrors(allErrors)
+                    return@setOnClickListener
+                }
+                returnResult(isFinal = true)
+            } else {
+                // Validar solo la página actual antes de avanzar
+                val fragment = fragmentAt(currentIndex)
+                var errors = fragment?.validate() ?: emptyList()
+                if (errors.isEmpty()) {
+                    val pageComponents = pages.getOrNull(currentIndex)?.components ?: emptyList()
+                    errors = validationEngine.validateRecursive(pageComponents, viewModel.formData)
+                }
+                if (errors.isNotEmpty()) {
+                    showValidationErrors(errors)
+                    return@setOnClickListener
+                }
+                binding.viewPager.currentItem = next
+            }
         }
 
         binding.btnPrev.setOnClickListener {
@@ -213,7 +279,13 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
                 .inflate(R.layout.item_form_tab, binding.tabsContainer, false) as TextView
             tab.text = page.title
             tab.tag = index
-            tab.setOnClickListener { binding.viewPager.currentItem = index }
+            tab.setOnClickListener {
+                val targetIndex = index
+                val currentIndex = binding.viewPager.currentItem
+                if (targetIndex == currentIndex) return@setOnClickListener
+                fragmentAt(currentIndex)?.clearErrors()
+                binding.viewPager.currentItem = targetIndex
+            }
             binding.tabsContainer.addView(tab)
         }
         updateTabSelection(0)
@@ -296,6 +368,33 @@ class FormWizardActivity : AppCompatActivity(), PhotoCaptureLauncher {
     override fun launchGallery(fieldKey: String, onResult: (String) -> Unit) {
         galleryPhotoCallback = onResult
         galleryLauncher.launch("image/*")
+    }
+
+    override fun launchSelfieCamera(fieldKey: String, onResult: (String) -> Unit) {
+        selfiePhotoCallback = onResult
+        val intent = Intent(this, SelfieCaptureActivity::class.java)
+        selfieLauncher.launch(intent)
+    }
+
+    override fun launchDocumentScanner(fieldKey: String, onResult: (String) -> Unit) {
+        android.util.Log.d("FormioScan", "launchDocumentScanner called for field=$fieldKey")
+        scannerPhotoCallback = onResult
+        val options = GmsDocumentScannerOptions.Builder()
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .setGalleryImportAllowed(false)
+            .setPageLimit(1)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .build()
+        GmsDocumentScanning.getClient(options)
+            .getStartScanIntent(this)
+            .addOnSuccessListener { intentSender ->
+                documentScannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("FormioScan", "Scanner failed: ${e.javaClass.simpleName}: ${e.message}", e)
+                com.genesis.formio.ui.widgets.FormioToast.show(this, "", "Error escáner: ${e.message}", "danger")
+                scannerPhotoCallback = null
+            }
     }
 
     private fun showValidationErrors(errors: List<String>) {

@@ -40,6 +40,9 @@ An Android library that renders [Form.io](https://form.io) JSON schemas as nativ
 - ✅ Button themes: `primary`, `success`, `warning`, `info`, `danger`, `secondary`
 - ✅ Button with custom JS execution (`app.ws()`, `form.getComponent()`, `moment()`)
 - ✅ Camera and gallery photo capture
+- ✅ **Document scanner** (`scan: true`) — ML Kit edge detection with perspective correction
+- ✅ **Selfie with liveness detection** (`selfie: true`) — random challenge-response (blink, smile, head turn) to prevent photo/video spoofing
+- ✅ **Gallery-only mode** (`uploadOnly: true`) — skips camera entirely
 - ✅ Signature pad with zoom preview
 - ✅ Map / location picker
 - ✅ Datagrid and EditGrid (repeating rows)
@@ -63,7 +66,7 @@ An Android library that renders [Form.io](https://form.io) JSON schemas as nativ
 | `selectboxes` | ✅ |
 | `tags` | ✅ |
 | `datetime`, `day` | ✅ |
-| `file` (camera + gallery) | ✅ |
+| `file` (camera / scanner / selfie / gallery) | ✅ |
 | `signature` | ✅ |
 | `map` / `location` | ✅ |
 | `address` | ✅ |
@@ -222,6 +225,85 @@ Supported JS APIs inside `custom`:
 | `app.mostrarMensaje(title, msg, type)` | Show a toast (`info`, `success`, `warning`, `danger`) |
 | `moment(date, format)` | Basic date formatting |
 
+---
+
+## File field — capture modes
+
+The `file` component supports four capture modes controlled by JSON properties. They are mutually exclusive — only one should be set to `true` at a time.
+
+| Property | Value | Behaviour |
+|---|---|---|
+| _(none)_ | — | Default camera — opens the device camera to take a photo |
+| `scan` | `true` | **Document scanner** — opens ML Kit document scanner with edge detection and perspective correction |
+| `selfie` | `true` | **Liveness selfie** — opens the rear camera with an oval overlay and a random liveness challenge |
+| `uploadOnly` | `true` | **Gallery only** — skips the camera and opens the image gallery directly |
+
+### Default camera
+
+```json
+{
+    "type": "file",
+    "key": "photo",
+    "label": "Photo"
+}
+```
+
+### Document scanner (`scan: true`)
+
+Uses Google ML Kit Document Scanner to detect document edges and apply perspective correction automatically. Ideal for ID cards, forms, or any flat document.
+
+```json
+{
+    "type": "file",
+    "key": "document",
+    "label": "Document",
+    "scan": true
+}
+```
+
+### Liveness selfie (`selfie: true`)
+
+Opens the **rear camera** so a promoter or agent can point the phone at the client. Uses CameraX + ML Kit Face Detection to:
+
+1. Detect the face inside the oval guide
+2. Run **2 random challenges** drawn from: blink, smile, turn left, turn right
+3. Each challenge has a **5-second countdown** (arc ring around the oval turns red as time runs out)
+4. Both challenges must be completed in order — if the timer expires the session resets with new random challenges
+5. On success, the photo is captured automatically
+
+This prevents spoofing with a printed photo (cannot blink/smile/turn) or a pre-recorded video (cannot respond to a random combination of challenges in real time).
+
+```json
+{
+    "type": "file",
+    "key": "clientPhoto",
+    "label": "Client photo",
+    "selfie": true
+}
+```
+
+**Overlay states:**
+
+| Color | Meaning |
+|---|---|
+| White | No face detected — "Coloca el rostro en el óvalo" |
+| Yellow | Face found — showing challenge instruction |
+| Green / Yellow / Red arc | Countdown ring — depletes over 5 s |
+| Green flash | Challenge step completed |
+| Red flash | Time expired or face lost — retrying |
+| Solid green | Liveness confirmed — capturing |
+
+### Gallery only (`uploadOnly: true`)
+
+```json
+{
+    "type": "file",
+    "key": "attachment",
+    "label": "Attachment",
+    "uploadOnly": true
+}
+```
+
 ### Result explained
 
 | Field | Type | Description |
@@ -272,7 +354,7 @@ The library declares the following permissions in its `AndroidManifest.xml`. The
 | Permission | Required for |
 |---|---|
 | `INTERNET` | Remote selects, `app.ws()` HTTP calls, WebView HTML |
-| `CAMERA` | `file` component — take a photo |
+| `CAMERA` | `file` component — camera, document scanner, and selfie capture |
 | `READ_EXTERNAL_STORAGE` (≤ API 32) | `file` component — pick from gallery |
 | `READ_MEDIA_IMAGES` (API 33+) | `file` component — pick from gallery |
 | `ACCESS_FINE_LOCATION` | `map` / `location` component |
@@ -318,6 +400,12 @@ cd formio-android/sample
 
 ## Changelog
 
+### v1.2.0
+- **Document scanner** (`scan: true`) — ML Kit Document Scanner with edge detection and perspective correction
+- **Liveness selfie** (`selfie: true`) — CameraX rear camera + ML Kit Face Detection with random challenge-response liveness (blink, smile, turn left/right); defeats both photo and video replay spoofing
+- **Gallery-only mode** (`uploadOnly: true`) — file field shows only the gallery picker
+- File field redesigned: single full-width action card instead of two half-width cards; mode determined by `scan` / `selfie` / `uploadOnly` flags
+
 ### v1.1.0
 - Loading overlay shown while the form opens and during HTTP button calls
 - Async JSON schema parsing — no more UI freeze on large forms
@@ -337,6 +425,7 @@ cd formio-android/sample
 - [ ] Light theme support
 - [ ] `signature` — upload from gallery
 - [ ] `file` — multiple file upload
+- [ ] Selfie: distance / brightness / blur quality checks before capture
 - [ ] Accessibility (TalkBack support)
 - [ ] English / i18n string overrides
 - [ ] Offline-first data queue (bring-your-own persistence)

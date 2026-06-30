@@ -47,33 +47,48 @@ class FileFieldBuilder(private val context: Context) {
         // ══════════════════════════════════════════════════════════════════════
         // STATE A — NO PHOTO: three large action tiles
         // ══════════════════════════════════════════════════════════════════════
-        val gap = (4 * dp).toInt()
+        val useScan     = component.scan
+        val uploadOnly  = component.uploadOnly
+        val useSelfie   = component.selfie
 
-        val cameraCardLarge = buildActionCard(
-            iconRes   = R.drawable.ic_camera,
-            iconColor = context.getColor(R.color.stat_sent),
-            title     = "Cámara",
-            subtitle  = "Tomar foto"
-        ).also {
-            it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = gap }
+        // uploadOnly=true → solo galería | selfie=true → selfie | scan=true → escáner | else → cámara
+        val primaryCard = when {
+            uploadOnly -> buildActionCard(
+                iconRes   = R.drawable.ic_photo_library,
+                iconColor = context.getColor(R.color.stat_done),
+                title     = "Galería",
+                subtitle  = "Subir imagen"
+            )
+            useSelfie  -> buildActionCard(
+                iconRes   = R.drawable.ic_selfie,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Selfie",
+                subtitle  = "Foto de rostro"
+            )
+            useScan    -> buildActionCard(
+                iconRes   = R.drawable.ic_scan,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Escanear",
+                subtitle  = "Escanear documento"
+            )
+            else       -> buildActionCard(
+                iconRes   = R.drawable.ic_camera,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Cámara",
+                subtitle  = "Tomar foto"
+            )
         }
+        primaryCard.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        )
 
-        val galleryCardLarge = buildActionCard(
-            iconRes   = R.drawable.ic_photo_library,
-            iconColor = context.getColor(R.color.stat_done),
-            title     = "Galería",
-            subtitle  = "Subir foto"
-        ).also {
-            it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginStart = gap }
-        }
+        // alias para mantener compatibilidad con referencias posteriores
+        val cameraCardLarge  = primaryCard
+        val galleryCardLarge = primaryCard   // mismo card, click se asigna abajo
 
         val tilesRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-            addView(cameraCardLarge)
-            addView(galleryCardLarge)
+            addView(primaryCard)
         }
         container.addView(tilesRow)
 
@@ -196,7 +211,15 @@ class FileFieldBuilder(private val context: Context) {
         }
 
         val btnView   = makeIconBtn(R.drawable.ic_eye,    "Ver",     context.getColor(R.color.text_secondary)) {}
-        val btnChange = makeIconBtn(R.drawable.ic_camera, "Cambiar", context.getColor(R.color.stat_sent)) {}
+        val btnChangeIcon = when {
+            uploadOnly -> R.drawable.ic_photo_library
+            useSelfie  -> R.drawable.ic_selfie
+            useScan    -> R.drawable.ic_scan
+            else       -> R.drawable.ic_camera
+        }
+        val btnChangeColor = if (uploadOnly) context.getColor(R.color.stat_done)
+                             else context.getColor(R.color.stat_sent)
+        val btnChange = makeIconBtn(btnChangeIcon, "Cambiar", btnChangeColor) {}
         val btnDelete = makeIconBtn(R.drawable.ic_delete, "Borrar",  context.getColor(R.color.error_color)) {}
 
         photoFooter.addView(btnView)
@@ -289,10 +312,21 @@ class FileFieldBuilder(private val context: Context) {
                     setOnClickListener { sheet.dismiss(); onClick() }
                 })
             }
-            option(R.drawable.ic_camera, "Tomar foto", context.getColor(R.color.stat_sent)) {
-                (context as? PhotoCaptureLauncher)?.launchCamera(component.key, onResult)
+            when {
+                uploadOnly -> option(R.drawable.ic_photo_library, "Elegir de galería", context.getColor(R.color.stat_done)) {
+                    (context as? PhotoCaptureLauncher)?.launchGallery(component.key, onResult)
+                }
+                useSelfie  -> option(R.drawable.ic_selfie, "Tomar selfie", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchSelfieCamera(component.key, onResult)
+                }
+                useScan    -> option(R.drawable.ic_scan, "Escanear documento", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchDocumentScanner(component.key, onResult)
+                }
+                else       -> option(R.drawable.ic_camera, "Tomar foto", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchCamera(component.key, onResult)
+                }
             }
-            option(R.drawable.ic_photo_library, "Elegir de galería", context.getColor(R.color.stat_done)) {
+            if (!uploadOnly) option(R.drawable.ic_photo_library, "Elegir de galería", context.getColor(R.color.stat_done)) {
                 (context as? PhotoCaptureLauncher)?.launchGallery(component.key, onResult)
             }
             sheet.setContentView(root)
@@ -307,21 +341,27 @@ class FileFieldBuilder(private val context: Context) {
             }
         }
 
-        // ── Large tile clicks ──────────────────────────────────────────────
-        cameraCardLarge.setOnClickListener {
-            (context as? PhotoCaptureLauncher)?.launchCamera(component.key) { path ->
+        // ── Large tile click ───────────────────────────────────────────────
+        primaryCard.setOnClickListener {
+            val onCapture: (String) -> Unit = { path ->
                 formData[component.key] = path
                 onChange(component.key, path)
                 showPreview(path)
-            } ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Cámara no disponible", "danger")
-        }
-
-        galleryCardLarge.setOnClickListener {
-            (context as? PhotoCaptureLauncher)?.launchGallery(component.key) { path ->
-                formData[component.key] = path
-                onChange(component.key, path)
-                showPreview(path)
-            } ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Galería no disponible", "danger")
+            }
+            when {
+                uploadOnly -> (context as? PhotoCaptureLauncher)
+                    ?.launchGallery(component.key, onCapture)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Galería no disponible", "danger")
+                useSelfie  -> (context as? PhotoCaptureLauncher)
+                    ?.launchSelfieCamera(component.key, onCapture)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Selfie no disponible", "danger")
+                useScan    -> (context as? PhotoCaptureLauncher)
+                    ?.launchDocumentScanner(component.key, onCapture)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Escáner no disponible", "danger")
+                else       -> (context as? PhotoCaptureLauncher)
+                    ?.launchCamera(component.key, onCapture)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Cámara no disponible", "danger")
+            }
         }
 
         // If there's already a saved value, show the preview immediately
