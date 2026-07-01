@@ -1,4 +1,4 @@
-﻿package com.genesis.formio.engine
+package com.genesis.formio.engine
 
 import android.content.Context
 import android.graphics.Typeface
@@ -23,8 +23,6 @@ class TabsFieldBuilder(
     ): View {
         val dp = context.resources.displayMetrics.density
 
-        // Each entry in component.components is a tab definition:
-        //   { label, key, components: [...fields] }
         val tabs = component.components ?: return LinearLayout(context)
 
         val container = LinearLayout(context).apply {
@@ -48,7 +46,7 @@ class TabsFieldBuilder(
         tabScrollView.addView(tabRow)
         container.addView(tabScrollView)
 
-        // ── Content panels (one per tab, only selected is visible) ────────────
+        // ── Content frame — cards are added lazily ─────────────────────────────
         val contentFrame = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -57,28 +55,16 @@ class TabsFieldBuilder(
         }
         container.addView(contentFrame)
 
-        val tabLabels = mutableListOf<TextView>()
-        val contentPanels = mutableListOf<LinearLayout>()
+        val tabLabels   = mutableListOf<TextView>()
+        // null = not yet rendered; non-null = already built MaterialCardView
+        val contentCards = arrayOfNulls<MaterialCardView>(tabs.size)
         val fieldFactory = FieldFactory(context, onButtonClick)
 
-        tabs.forEachIndexed { index, tabDef ->
-            // ── Tab label button ───────────────────────────────────────────────
-            val tabLabel = TextView(context).apply {
-                text = tabDef.label
-                textSize = 13f
-                setPadding(
-                    (14 * dp).toInt(), (8 * dp).toInt(),
-                    (14 * dp).toInt(), (8 * dp).toInt()
-                )
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = (6 * dp).toInt() }
-            }
-            tabRow.addView(tabLabel)
-            tabLabels.add(tabLabel)
+        // ── Build a tab's card on demand ───────────────────────────────────────
+        fun buildCard(index: Int): MaterialCardView {
+            contentCards[index]?.let { return it }
 
-            // ── Content panel for this tab ─────────────────────────────────────
+            val tabDef = tabs[index]
             val card = MaterialCardView(context).apply {
                 setCardBackgroundColor(context.getColor(R.color.bg_card))
                 radius = (12 * dp)
@@ -89,6 +75,7 @@ class TabsFieldBuilder(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
                 )
+                visibility = View.GONE
             }
 
             val panel = LinearLayout(context).apply {
@@ -105,7 +92,8 @@ class TabsFieldBuilder(
 
             card.addView(panel)
             contentFrame.addView(card)
-            contentPanels.add(panel)
+            contentCards[index] = card
+            return card
         }
 
         // ── Selection logic ────────────────────────────────────────────────────
@@ -121,10 +109,16 @@ class TabsFieldBuilder(
                     label.setTypeface(null, Typeface.NORMAL)
                 }
             }
-            contentPanels.forEachIndexed { i, panel ->
-                (panel.parent as? View)?.visibility =
-                    if (i == index) View.VISIBLE else View.GONE
+
+            // Lazy: build the selected tab if it hasn't been rendered yet
+            val selectedCard = buildCard(index)
+
+            // Hide all other already-built cards, show the selected one
+            contentCards.forEachIndexed { i, card ->
+                card?.visibility = if (i == index) View.VISIBLE else View.GONE
             }
+            selectedCard.visibility = View.VISIBLE
+
             // Scroll active tab into view
             tabScrollView.post {
                 val tabView = tabLabels.getOrNull(index) ?: return@post
@@ -133,11 +127,26 @@ class TabsFieldBuilder(
             }
         }
 
-        tabLabels.forEachIndexed { i, label ->
-            label.setOnClickListener { selectTab(i) }
+        // ── Build only tab labels up-front (no content yet) ───────────────────
+        tabs.forEachIndexed { index, tabDef ->
+            val tabLabel = TextView(context).apply {
+                text = tabDef.label
+                textSize = 13f
+                setPadding(
+                    (14 * dp).toInt(), (8 * dp).toInt(),
+                    (14 * dp).toInt(), (8 * dp).toInt()
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (6 * dp).toInt() }
+                setOnClickListener { selectTab(index) }
+            }
+            tabRow.addView(tabLabel)
+            tabLabels.add(tabLabel)
         }
 
-        // Select first tab by default
+        // Select (and lazily render) the first tab
         if (tabs.isNotEmpty()) selectTab(0)
 
         return container

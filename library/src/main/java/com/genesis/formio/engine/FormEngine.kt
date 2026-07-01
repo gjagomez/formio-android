@@ -63,6 +63,8 @@ class FormEngine(
 
     private fun buildCalculateDeps(components: List<FormComponent>) {
         components.forEach { comp ->
+            // Don't descend into grid rows — their calculateValue uses `row.*` not form-level data
+            if (comp.type == "datagrid" || comp.type == "editgrid") return@forEach
             comp.calculateValue?.takeIf { it.isNotBlank() }?.let { expr ->
                 calculateValueMap[comp.key] = expr
                 CalculateValueEngine.extractDependencies(expr).forEach { dep ->

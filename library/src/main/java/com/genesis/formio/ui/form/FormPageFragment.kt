@@ -36,6 +36,7 @@ class FormPageFragment : Fragment() {
     private lateinit var formEngine: FormEngine
     private var jsExecutor: FormJsExecutor? = null   // created lazily on first custom-button tap
     private lateinit var loadingOverlay: FormioLoadingOverlay
+    private var renderedPageId: Int = -1              // hash of last rendered page to avoid double-render
 
     // ── Location permission for app.mapa() ────────────────────────────────────
     private var pendingLatKey: String = ""
@@ -66,12 +67,16 @@ class FormPageFragment : Fragment() {
         val pageIndex = arguments?.getInt(ARG_PAGE_INDEX, 0) ?: 0
         viewModel.pages.observe(viewLifecycleOwner) { pages ->
             val page = pages.getOrNull(pageIndex) ?: return@observe
+            val pageId = System.identityHashCode(pages) xor pageIndex
+            if (pageId == renderedPageId) return@observe   // same data, skip re-render
+            renderedPageId = pageId
             renderPage(page)
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
+        renderedPageId = -1   // reset so next view creation can render
         if (::loadingOverlay.isInitialized) loadingOverlay.hide()
         jsExecutor?.destroy()
         jsExecutor = null

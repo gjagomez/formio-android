@@ -14,11 +14,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import com.genesis.formio.R
 import com.genesis.formio.model.FormComponent
 import com.genesis.formio.ui.form.PhotoCaptureLauncher
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
 class FileFieldBuilder(private val context: Context) {
@@ -50,11 +48,16 @@ class FileFieldBuilder(private val context: Context) {
         // ══════════════════════════════════════════════════════════════════════
         // STATE A — NO PHOTO: three large action tiles
         // ══════════════════════════════════════════════════════════════════════
-        val useScan     = component.scan
-        val uploadOnly  = component.uploadOnly
-        val useSelfie   = component.selfie
+        val useScan    = component.scan
+        val uploadOnly = component.uploadOnly
+        val useSelfie  = component.selfie
+        val useWebcam  = component.webcam
 
-        // uploadOnly=true → solo galería | selfie=true → selfie | scan=true → escáner | else → cámara
+        // Dual tiles only when uploadOnly=true AND webcam=true:
+        // primary=gallery, secondary=camera/selfie/scan
+        // scan and selfie are always single tiles regardless of webcam
+        val showDualTiles = uploadOnly && useWebcam
+
         val primaryCard = when {
             uploadOnly -> buildActionCard(
                 iconRes   = R.drawable.ic_photo_library,
@@ -81,18 +84,52 @@ class FileFieldBuilder(private val context: Context) {
                 subtitle  = "Tomar foto"
             )
         }
-        primaryCard.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        )
 
-        // alias para mantener compatibilidad con referencias posteriores
-        val cameraCardLarge  = primaryCard
-        val galleryCardLarge = primaryCard   // mismo card, click se asigna abajo
+        // Secondary tile (only when uploadOnly+webcam): selfie/scan/camera depending on flags
+        val secondaryCard: MaterialCardView? = if (showDualTiles) when {
+            useSelfie -> buildActionCard(
+                iconRes   = R.drawable.ic_selfie,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Selfie",
+                subtitle  = "Foto de rostro"
+            )
+            useScan   -> buildActionCard(
+                iconRes   = R.drawable.ic_scan,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Escanear",
+                subtitle  = "Escanear documento"
+            )
+            else      -> buildActionCard(
+                iconRes   = R.drawable.ic_camera,
+                iconColor = context.getColor(R.color.stat_sent),
+                title     = "Cámara",
+                subtitle  = "Tomar foto"
+            )
+        } else null
 
         val tilesRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(primaryCard)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
+
+        if (showDualTiles && secondaryCard != null) {
+            primaryCard.layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginEnd = (spacingSm / 2) }
+            secondaryCard.layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginStart = (spacingSm / 2) }
+            tilesRow.addView(primaryCard)
+            tilesRow.addView(secondaryCard)
+        } else {
+            primaryCard.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            tilesRow.addView(primaryCard)
+        }
+
         container.addView(tilesRow)
 
         // ══════════════════════════════════════════════════════════════════════
@@ -232,25 +269,29 @@ class FileFieldBuilder(private val context: Context) {
         photoCard.addView(photoCardInner)
         withPhotoLayout.addView(photoCard)
 
-        // Keep references for the large card click (used in showPreview)
-        val largeImageCard = photoCard
-
         container.addView(withPhotoLayout)
 
         // ── Helper: switch to "with photo" state ───────────────────────────
         fun showPreview(value: String) {
             if (value.isBlank()) return
-            try {
-                val bmp = if (value.startsWith("/") || value.startsWith("file://")) {
+            val bmp: Bitmap? = try {
+                if (value.startsWith("/") || value.startsWith("file://")) {
                     val path = if (value.startsWith("file://")) value.removePrefix("file://") else value
                     decodeBitmapFromPath(path)
                 } else {
+                    val raw64 = if (value.contains("base64,")) value.substringAfter("base64,") else value
                     val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
-                    val bytes = Base64.decode(value.substringAfter("base64,"), Base64.DEFAULT)
+                    val bytes = Base64.decode(raw64, Base64.DEFAULT)
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
                 }
-                if (bmp != null) largeImageView.setImageBitmap(bmp)
-            } catch (_: Throwable) { }
+            } catch (_: Throwable) { null }
+
+            if (bmp == null) return  // don't enter state B with an empty image
+
+            // Recycle the previous bitmap before replacing it
+            val prev = (largeImageView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            largeImageView.setImageBitmap(bmp)
+            if (prev != null && prev != bmp && !prev.isRecycled) prev.recycle()
 
             tilesRow.visibility = View.GONE
             withPhotoLayout.visibility = View.VISIBLE
@@ -329,8 +370,16 @@ class FileFieldBuilder(private val context: Context) {
                     (context as? PhotoCaptureLauncher)?.launchCamera(component.key, onResult)
                 }
             }
-            if (!uploadOnly) option(R.drawable.ic_photo_library, "Elegir de galería", context.getColor(R.color.stat_done)) {
-                (context as? PhotoCaptureLauncher)?.launchGallery(component.key, onResult)
+            if (showDualTiles) when {
+                useSelfie -> option(R.drawable.ic_selfie, "Tomar selfie", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchSelfieCamera(component.key, onResult)
+                }
+                useScan   -> option(R.drawable.ic_scan, "Escanear documento", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchDocumentScanner(component.key, onResult)
+                }
+                else      -> option(R.drawable.ic_camera, "Tomar foto", context.getColor(R.color.stat_sent)) {
+                    (context as? PhotoCaptureLauncher)?.launchCamera(component.key, onResult)
+                }
             }
             sheet.setContentView(root)
             sheet.show()
@@ -345,24 +394,39 @@ class FileFieldBuilder(private val context: Context) {
         }
 
         // ── Large tile click ───────────────────────────────────────────────
+        fun captureOnResult(path: String) {
+            formData[component.key] = path
+            onChange(component.key, path)
+            showPreview(path)
+        }
+
         primaryCard.setOnClickListener {
-            val onCapture: (String) -> Unit = { path ->
-                formData[component.key] = path
-                onChange(component.key, path)
-                showPreview(path)
-            }
             when {
                 uploadOnly -> (context as? PhotoCaptureLauncher)
-                    ?.launchGallery(component.key, onCapture)
+                    ?.launchGallery(component.key, ::captureOnResult)
                     ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Galería no disponible", "danger")
                 useSelfie  -> (context as? PhotoCaptureLauncher)
-                    ?.launchSelfieCamera(component.key, onCapture)
+                    ?.launchSelfieCamera(component.key, ::captureOnResult)
                     ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Selfie no disponible", "danger")
                 useScan    -> (context as? PhotoCaptureLauncher)
-                    ?.launchDocumentScanner(component.key, onCapture)
+                    ?.launchDocumentScanner(component.key, ::captureOnResult)
                     ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Escáner no disponible", "danger")
                 else       -> (context as? PhotoCaptureLauncher)
-                    ?.launchCamera(component.key, onCapture)
+                    ?.launchCamera(component.key, ::captureOnResult)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Cámara no disponible", "danger")
+            }
+        }
+
+        secondaryCard?.setOnClickListener {
+            when {
+                useSelfie -> (context as? PhotoCaptureLauncher)
+                    ?.launchSelfieCamera(component.key, ::captureOnResult)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Selfie no disponible", "danger")
+                useScan   -> (context as? PhotoCaptureLauncher)
+                    ?.launchDocumentScanner(component.key, ::captureOnResult)
+                    ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Escáner no disponible", "danger")
+                else      -> (context as? PhotoCaptureLauncher)
+                    ?.launchCamera(component.key, ::captureOnResult)
                     ?: com.genesis.formio.ui.widgets.FormioToast.show(context, "", "Cámara no disponible", "danger")
             }
         }
@@ -381,10 +445,7 @@ class FileFieldBuilder(private val context: Context) {
         val raw = BitmapFactory.decodeFile(path, opts) ?: return null
         return try {
             val exif = ExifInterface(path)
-            val orientation = exif.getAttributeInt(
-                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
-            )
-            val degrees = when (orientation) {
+            val degrees = when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
                 ExifInterface.ORIENTATION_ROTATE_90  -> 90f
                 ExifInterface.ORIENTATION_ROTATE_180 -> 180f
                 ExifInterface.ORIENTATION_ROTATE_270 -> 270f
@@ -393,7 +454,9 @@ class FileFieldBuilder(private val context: Context) {
             val matrix = Matrix().apply { postRotate(degrees) }
             Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
                 .also { if (it !== raw) raw.recycle() }
-        } catch (_: Throwable) { raw }
+        } catch (_: Throwable) {
+            raw  // ExifInterface failed but raw bitmap is valid — return as-is
+        }
     }
 
     // ── Large action tile ──────────────────────────────────────────────────────
